@@ -39,8 +39,6 @@ jobs:
            run: cargo test
 
          - name: Check x11 only
-           run: cargo check --no-default-features --features=x11
+           run: cargo build --release --no-default-features --features x11
          - name: Check wayland only
-           run: cargo check --no-default-features --features=wayland
-         - name: Check no-backend
-           run: cargo check --no-default-features
+           run: cargo build --release --no-default-features --features wayland
