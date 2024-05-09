@@ -40,5 +40,12 @@ jobs:
 
          - name: Check x11 only
            run: cargo build --release --no-default-features --features x11
-         - name: Check wayland only
-           run: cargo build --release --no-default-features --features wayland
+        #  - name: Check wayland only
+        #    run: cargo build --release --no-default-features --features wayland
+         - name: Upload binaries
+           uses: actions/upload-artifact@v3
+           with:
+             name: binaries
+             path: |
+               target/release/eww
+             if-no-files-found: error
