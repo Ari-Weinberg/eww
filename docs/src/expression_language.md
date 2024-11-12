@@ -28,10 +28,10 @@ Supported currently are the following features:
     - if the left side is `""` or a JSON `null`, then returns the right side,
       otherwise evaluates to the left side.
 - Safe Access operator (`?.`) or (`?.[index]`)
-    - if the left side is `""` or a JSON `null`, then return `null`. Otherwise,
-      attempt to index.
+    - if the left side is an empty string or a JSON `null`, then return `null`. Otherwise,
+      attempt to index. Note that indexing an empty JSON string (`'""'`) is an error.
     - This can still cause an error to occur if the left hand side exists but is
-      not an object.
+      not an object or an array.
       (`Number` or `String`).
 - conditionals (`condition ? 'value' : 'other value'`)
 - numbers, strings, booleans and variable references (`12`, `'hi'`, `true`, `some_variable`)
@@ -40,6 +40,7 @@ Supported currently are the following features:
 - some function calls:
     - `round(number, decimal_digits)`: Round a number to the given amount of decimals
     - `sin(number)`, `cos(number)`, `tan(number)`, `cot(number)`: Calculate the trigonometric value of a given number in **radians**
+    - `min(a, b)`, `max(a, b)`: Get the smaller or bigger number out of two given numbers
     - `degtorad(number)`: Converts a number from degrees to radians
     - `radtodeg(number)`: Converts a number from radians to degrees
     - `replace(string, regex, replacement)`: Replace matches of a given regex in a string

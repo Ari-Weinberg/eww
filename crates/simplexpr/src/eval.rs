@@ -7,7 +7,7 @@ use crate::{
     ast::{AccessType, BinOp, SimplExpr, UnaryOp},
     dynval::{ConversionError, DynVal},
 };
-use eww_shared_util::{Span, Spanned, VarName};
+use eww_shared_util::{get_locale, Span, Spanned, VarName};
 use std::{
     collections::HashMap,
     convert::{Infallible, TryFrom, TryInto},
@@ -268,6 +268,10 @@ impl SimplExpr {
 
                 let is_safe = *safe == AccessType::Safe;
 
+                // Needs to be done first as `as_json_value` fails on empty string
+                if is_safe && val.as_string()?.is_empty() {
+                    return Ok(DynVal::from(&serde_json::Value::Null).at(*span));
+                }
                 match val.as_json_value()? {
                     serde_json::Value::Array(val) => {
                         let index = index.as_i32()?;
@@ -280,9 +284,6 @@ impl SimplExpr {
                             .or_else(|| val.get(&index.as_i32().ok()?.to_string()))
                             .unwrap_or(&serde_json::Value::Null);
                         Ok(DynVal::from(indexed_value).at(*span))
-                    }
-                    serde_json::Value::String(val) if val.is_empty() && is_safe => {
-                        Ok(DynVal::from(&serde_json::Value::Null).at(*span))
                     }
                     serde_json::Value::Null if is_safe => Ok(DynVal::from(&serde_json::Value::Null).at(*span)),
                     _ => Err(EvalError::CannotIndex(format!("{}", val)).at(*span)),
@@ -325,6 +326,22 @@ fn call_expr_function(name: &str, args: Vec<DynVal>) -> Result<DynVal, EvalError
                 let num = num.as_f64()?;
                 let digits = digits.as_i32()?;
                 Ok(DynVal::from(format!("{:.1$}", num, digits as usize)))
+            }
+            _ => Err(EvalError::WrongArgCount(name.to_string())),
+        },
+        "min" => match args.as_slice() {
+            [a, b] => {
+                let a = a.as_f64()?;
+                let b = b.as_f64()?;
+                Ok(DynVal::from(f64::min(a, b)))
+            }
+            _ => Err(EvalError::WrongArgCount(name.to_string())),
+        },
+        "max" => match args.as_slice() {
+            [a, b] => {
+                let a = a.as_f64()?;
+                let b = b.as_f64()?;
+                Ok(DynVal::from(f64::max(a, b)))
             }
             _ => Err(EvalError::WrongArgCount(name.to_string())),
         },
@@ -451,12 +468,16 @@ fn call_expr_function(name: &str, args: Vec<DynVal>) -> Result<DynVal, EvalError
                 };
 
                 Ok(DynVal::from(match timezone.timestamp_opt(timestamp.as_i64()?, 0) {
-                    LocalResult::Single(t) | LocalResult::Ambiguous(t, _) => t.format(&format.as_string()?).to_string(),
+                    LocalResult::Single(t) | LocalResult::Ambiguous(t, _) => {
+                        t.format_localized(&format.as_string()?, get_locale()).to_string()
+                    }
                     LocalResult::None => return Err(EvalError::ChronoError("Invalid UNIX timestamp".to_string())),
                 }))
             }
             [timestamp, format] => Ok(DynVal::from(match Local.timestamp_opt(timestamp.as_i64()?, 0) {
-                LocalResult::Single(t) | LocalResult::Ambiguous(t, _) => t.format(&format.as_string()?).to_string(),
+                LocalResult::Single(t) | LocalResult::Ambiguous(t, _) => {
+                    t.format_localized(&format.as_string()?, get_locale()).to_string()
+                }
                 LocalResult::None => return Err(EvalError::ChronoError("Invalid UNIX timestamp".to_string())),
             })),
             _ => Err(EvalError::WrongArgCount(name.to_string())),
@@ -544,6 +565,8 @@ mod tests {
         string_to_string(r#""Hello""#) => Ok(DynVal::from("Hello".to_string())),
         safe_access_to_existing(r#"{ "a": { "b": 2 } }.a?.b"#) => Ok(DynVal::from(2)),
         safe_access_to_missing(r#"{ "a": { "b": 2 } }.b?.b"#) => Ok(DynVal::from(&serde_json::Value::Null)),
+        safe_access_to_empty(r#"""?.test"#) => Ok(DynVal::from(&serde_json::Value::Null)),
+        safe_access_to_empty_json_string(r#"'""'?.test"#) => Err(super::EvalError::CannotIndex("\"\"".to_string())),
         safe_access_index_to_existing(r#"[1, 2]?.[1]"#) => Ok(DynVal::from(2)),
         safe_access_index_to_missing(r#""null"?.[1]"#) => Ok(DynVal::from(&serde_json::Value::Null)),
         safe_access_index_to_non_indexable(r#"32?.[1]"#) => Err(super::EvalError::CannotIndex("32".to_string())),
